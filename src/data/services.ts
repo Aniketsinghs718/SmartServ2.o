@@ -4,7 +4,7 @@ export const serviceCategories: ServiceCategory[] = [
   {
     id: '1',
     name: 'Automobile & Roadside Assistance',
-    image: 'https://images.unsplash.com/photo-1632823471565-1ecdf5c900cb?ixlib=rb-4.0.3&auto=format&fit=crop&w=1000&q=80',
+    image: 'https://images.pexels.com/photos/17429096/pexels-photo-17429096/free-photo-of-man-fixing-a-car.jpeg?auto=compress&cs=tinysrgb&w=300&auto=format&fit=crop&w=1000&q=80',
     services: [
       {
         id: '101',
@@ -64,7 +64,7 @@ export const serviceCategories: ServiceCategory[] = [
         category: 'Home Repair & Maintenance',
         price: 1499,
         rating: 4.8,
-        image: 'https://images.unsplash.com/photo-1632823471565-1ecdf5c900cb?ixlib=rb-4.0.3&auto=format&fit=crop&w=1000&q=80',
+        image: 'https://images.pexels.com/photos/9431615/pexels-photo-9431615.jpeg?auto=compress&cs=tinysrgb&w=300&auto=format&fit=crop&w=1000&q=80',
         description: 'Expert roof leak detection and repair services'
       }
     ]
@@ -98,7 +98,7 @@ export const serviceCategories: ServiceCategory[] = [
         category: 'Tech & Gadgets Repair',
         price: 1999,
         rating: 4.7,
-        image: 'https://images.unsplash.com/photo-1558002038-76f45789c4a4?ixlib=rb-4.0.3&auto=format&fit=crop&w=1000&q=80',
+        image: 'https://images.unsplash.com/photo-1523484489927-4aa8bf9a99d8?w=500&auto=format&fit=crop&q=60&ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxzZWFyY2h8Mnx8bWFydCUyMExvY2slMjBJbnN0YWxsYXRpb258ZW58MHx8MHx8fDA%3D&auto=format&fit=crop&w=1000&q=80',
         description: 'Smart lock installation and configuration service'
       }
     ]
@@ -106,7 +106,7 @@ export const serviceCategories: ServiceCategory[] = [
   {
     id: '4',
     name: 'Industrial & Commercial',
-    image: 'https://images.unsplash.com/photo-1581092921461-39b9d08a9b21?ixlib=rb-4.0.3&auto=format&fit=crop&w=1000&q=80',
+    image: 'https://images.unsplash.com/photo-1592963219573-c388f7232a5f?w=500&auto=format&fit=crop&q=60&ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxzZWFyY2h8NHx8SW5kdXN0cmlhbCUyMCUyNiUyMENvbW1lcmNpYWx8ZW58MHx8MHx8fDA%3D&auto=format&fit=crop&w=1000&q=80',
     services: [
       {
         id: '401',

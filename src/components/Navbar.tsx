@@ -47,7 +47,7 @@ const Navbar: React.FC = () => {
           <div className="flex items-center">
             <Link to="/" className="flex-shrink-0 flex items-center">
               <span className={`text-2xl font-bold ${isScrolled || isProviderDashboard ? 'text-indigo-600' : 'text-white'}`}>
-                UrbanServices
+                SmartServ
               </span>
             </Link>
           </div>
