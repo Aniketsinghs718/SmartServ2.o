@@ -41,6 +41,8 @@ export interface Address {
   address: string;
   city: string;
   pincode: string;
+  latitude?: number;
+  longitude?: number;
 }
 
 export interface Booking {
@@ -53,6 +55,15 @@ export interface Booking {
   status: 'pending' | 'confirmed' | 'completed' | 'cancelled';
   addressId: string;
   price: number;
+  // Additional fields for display
+  serviceName?: string;
+  serviceImage?: string;
+  providerName?: string;
+  tipAmount?: number;
+  paymentMethod?: string;
+  paymentStatus?: string;
+  paymentId?: string | null;
+  paymentOrderId?: string | null;
 }
 
 export interface ProviderProfile {

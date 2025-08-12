@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Calendar, Clock, MapPin, AlertCircle } from 'lucide-react';
+import { Calendar, Clock, MapPin } from 'lucide-react';
 import { Booking, Service, ServiceProvider, Address } from '../types';
 import { serviceCategories, serviceProviders } from '../data/services';
 import { supabase } from '../lib/supabase';
@@ -14,90 +14,142 @@ const BookingCard: React.FC<BookingCardProps> = ({ booking, address, onCancel })
   const [service, setService] = useState<Service | undefined>();
   const [provider, setProvider] = useState<ServiceProvider | undefined>();
   const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     const loadServiceAndProvider = async () => {
       setIsLoading(true);
-      setError(null);
-      
+
       try {
-        // Try to fetch service from Supabase
-        const { data: serviceData, error: serviceError } = await supabase
-          .from('services')
-          .select('*')
-          .eq('id', booking.serviceId)
-          .single();
+        // If booking already has service name and provider name, use those as defaults
+        // This ensures we show something even if data fetching fails
+        if (booking.serviceName) {
+          // Create a properly typed service object
+          const baseService: Service = {
+            id: booking.serviceId,
+            name: booking.serviceName || 'Service', // Ensure name is never undefined
+            category: 'Service',
+            price: booking.price || 0,
+            rating: 4.5,
+            image: booking.serviceImage || 'https://via.placeholder.com/150',
+            description: '',
+            duration: '60 min',
+            providerId: booking.providerId
+          };
           
-        if (serviceError) {
-          console.error('Error loading service from Supabase:', serviceError);
-          // Fall back to local data
-          const localService = serviceCategories
-            .flatMap(category => category.services)
-            .find(service => service.id === booking.serviceId);
-            
-          setService(localService);
-        } else if (serviceData) {
-          setService({
-            id: serviceData.id,
-            name: serviceData.name,
-            category: serviceData.category,
-            price: serviceData.price,
-            rating: serviceData.rating || 0,
-            image: serviceData.image || 'https://via.placeholder.com/150',
-            description: serviceData.description || '',
-            duration: serviceData.duration,
-            providerId: serviceData.provider_id
+          setService(prevService => {
+            // If there's a previous service, merge with its values
+            if (prevService) {
+              return {
+                ...baseService,
+                category: prevService.category || 'Service',
+              };
+            }
+            return baseService;
           });
         }
         
-        // Try to fetch provider from Supabase
-        const { data: providerData, error: providerError } = await supabase
-          .from('provider_profiles')
-          .select('*, profiles(*)')
-          .eq('id', booking.providerId)
-          .single();
-          
-        if (providerError) {
-          console.error('Error loading provider from Supabase:', providerError);
-          // Fall back to local data
-          const localProvider = serviceProviders
-            .find(provider => provider.id === booking.providerId);
-            
-          setProvider(localProvider);
-        } else if (providerData) {
-          setProvider({
-            id: providerData.id,
-            name: providerData.profiles?.full_name || 'Service Provider',
-            image: providerData.profiles?.avatar_url || 'https://via.placeholder.com/150',
-            rating: providerData.rating || 4.5,
-            totalBookings: providerData.total_bookings || 0,
+        if (booking.providerName) {
+          // Create a properly typed provider object
+          const baseProvider: ServiceProvider = {
+            id: booking.providerId,
+            name: booking.providerName || 'Service Provider', // Ensure name is never undefined
+            image: 'https://via.placeholder.com/150?text=Provider',
+            rating: 4.5,
+            totalBookings: 0,
             services: []
+          };
+          
+          setProvider(prevProvider => {
+            // If there's a previous provider, merge with its values
+            if (prevProvider) {
+              return {
+                ...baseProvider,
+                rating: prevProvider.rating || 4.5,
+              };
+            }
+            return baseProvider;
           });
+        }
+
+        // Try to fetch service from Supabase
+        try {
+          const { data: serviceData, error: serviceError } = await supabase
+            .from('services')
+            .select('*')
+            .eq('id', booking.serviceId)
+            .single();
+
+          if (serviceError) {
+            console.log('Falling back to local service data');
+            // Fall back to local data
+            const localService = serviceCategories
+              .flatMap(category => category.services)
+              .find(service => service.id === booking.serviceId);
+
+            if (localService) {
+              setService(localService);
+            }
+          } else if (serviceData) {
+            const supabaseService: Service = {
+              id: serviceData.id,
+              name: serviceData.name || booking.serviceName || 'Service',
+              category: serviceData.category || 'Category',
+              price: serviceData.price || booking.price || 0,
+              rating: serviceData.rating || 4.5,
+              image: serviceData.image || booking.serviceImage || 'https://via.placeholder.com/150',
+              description: serviceData.description || '',
+              duration: serviceData.duration || '60 min',
+              providerId: serviceData.provider_id || booking.providerId
+            };
+            setService(supabaseService);
+          }
+        } catch (serviceErr) {
+          console.log('Error fetching service:', serviceErr);
+        }
+
+        // Try to fetch provider from Supabase
+        try {
+          const { data: providerData, error: providerError } = await supabase
+            .from('provider_profiles')
+            .select('*, profiles(*)')
+            .eq('id', booking.providerId)
+            .single();
+
+          if (providerError) {
+            console.log('Falling back to local provider data');
+            // Fall back to local data
+            const localProvider = serviceProviders
+              .find(provider => provider.id === booking.providerId);
+              
+            if (localProvider) {
+              setProvider(localProvider);
+            }
+          } else if (providerData) {
+            const supabaseProvider: ServiceProvider = {
+              id: providerData.id,
+              name: providerData.profiles?.full_name || booking.providerName || 'Service Provider',
+              image: providerData.profiles?.avatar_url || 'https://via.placeholder.com/150',
+              rating: providerData.rating || 4.5,
+              totalBookings: providerData.total_bookings || 0,
+              services: []
+            };
+            setProvider(supabaseProvider);
+          }
+        } catch (providerErr) {
+          console.log('Error fetching provider:', providerErr);
         }
       } catch (error) {
-        console.error('Error loading service and provider data:', error);
-        setError('Failed to load booking details');
-        
-        // Fall back to local data as a last resort
-        const localService = serviceCategories
-          .flatMap(category => category.services)
-          .find(service => service.id === booking.serviceId);
-          
-        const localProvider = serviceProviders
-          .find(provider => provider.id === booking.providerId);
-          
-        setService(localService);
-        setProvider(localProvider);
+        console.log('Error in loadServiceAndProvider:', error);
+        // Don't set error state here, let the component try to render with whatever data it has
       } finally {
         setIsLoading(false);
       }
     };
-    
-    loadServiceAndProvider();
-  }, [booking.serviceId, booking.providerId]);
 
-  // If still loading or no service/provider found, show placeholder
+    loadServiceAndProvider();
+  }, [booking]);
+
+  // If still loading, show placeholder
   if (isLoading) {
     return (
       <div className="bg-white rounded-lg shadow-md overflow-hidden p-4 animate-pulse">
@@ -113,31 +165,8 @@ const BookingCard: React.FC<BookingCardProps> = ({ booking, address, onCancel })
     );
   }
 
-  // If error or missing data, show error card
-  if (error || (!service && !provider)) {
-    return (
-      <div className="bg-white rounded-lg shadow-md overflow-hidden p-4">
-        <div className="flex items-center text-red-500 mb-4">
-          <AlertCircle size={20} className="mr-2" />
-          <span className="font-medium">Error loading booking details</span>
-        </div>
-        <p className="text-gray-600 mb-2">Booking ID: {booking.id}</p>
-        <p className="text-gray-600 mb-2">Date: {booking.date}</p>
-        <p className="text-gray-600">Time: {booking.time}</p>
-        {booking.status !== 'cancelled' && booking.status !== 'completed' && (
-          <div className="mt-4 pt-3 border-t border-gray-200">
-            <button 
-              onClick={() => onCancel(booking.id)}
-              className="px-4 py-2 text-sm font-medium text-red-600 hover:text-red-800 focus:outline-none"
-            >
-              Cancel Booking
-            </button>
-          </div>
-        )}
-      </div>
-    );
-  }
-
+  // Instead of showing an error, render with the available booking information
+  // This ensures users always see their booking details even if service/provider lookup fails
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'confirmed':
@@ -158,7 +187,9 @@ const BookingCard: React.FC<BookingCardProps> = ({ booking, address, onCancel })
       <div className="p-4 border-b border-gray-200">
         <div className="flex justify-between items-start">
           <div>
-            <h3 className="text-lg font-semibold text-gray-800">{service?.name || 'Service'}</h3>
+            <h3 className="text-lg font-semibold text-gray-800">
+              {booking.serviceName || service?.name || 'Service'}
+            </h3>
             <p className="text-sm text-gray-500">{service?.category || 'Category'}</p>
           </div>
           <div className={`px-3 py-1 rounded-full text-sm font-medium ${getStatusColor(booking.status)}`}>
@@ -166,14 +197,15 @@ const BookingCard: React.FC<BookingCardProps> = ({ booking, address, onCancel })
           </div>
         </div>
       </div>
-      
+
       <div className="p-4">
-        {provider && (
+        {/* Show provider info if available */}
+        {(provider || booking.providerName) && (
           <div className="flex items-start mb-3">
             <div className="w-10 h-10 rounded-full overflow-hidden mr-3">
-              <img 
-                src={provider.image} 
-                alt={provider.name} 
+              <img
+                src={provider?.image || booking.serviceImage || 'https://via.placeholder.com/150?text=Provider'}
+                alt={provider?.name || booking.providerName || 'Provider'}
                 className="w-full h-full object-cover"
                 onError={(e) => {
                   // If image fails to load, use a placeholder
@@ -182,12 +214,12 @@ const BookingCard: React.FC<BookingCardProps> = ({ booking, address, onCancel })
               />
             </div>
             <div>
-              <p className="font-medium text-gray-800">{provider.name}</p>
+              <p className="font-medium text-gray-800">{provider?.name || booking.providerName || 'Service Provider'}</p>
               <p className="text-sm text-gray-500">Service Provider</p>
             </div>
           </div>
         )}
-        
+
         <div className="space-y-2 mb-4">
           <div className="flex items-center text-sm text-gray-600">
             <Calendar size={16} className="mr-2" />
@@ -204,12 +236,12 @@ const BookingCard: React.FC<BookingCardProps> = ({ booking, address, onCancel })
             </div>
           )}
         </div>
-        
+
         <div className="flex justify-between items-center pt-3 border-t border-gray-200">
           <p className="font-bold text-gray-800">₹{booking.price}</p>
-          
+
           {booking.status !== 'cancelled' && booking.status !== 'completed' && (
-            <button 
+            <button
               onClick={() => onCancel(booking.id)}
               className="px-4 py-2 text-sm font-medium text-red-600 hover:text-red-800 focus:outline-none"
             >

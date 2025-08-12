@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Clock, MapPin, Phone, Edit, AlertCircle, Loader } from 'lucide-react';
+import { Calendar, Clock, MapPin, Plus, Phone, Edit, ChevronRight, AlertCircle, CheckCircle, Loader, MinusCircle, PlusCircle, Zap } from 'lucide-react';
 import { useCart } from '../context/CartContext';
 import { useAuth } from '../context/AuthContext';
 import { useAuthStore } from '../stores/authStore';
@@ -8,7 +8,6 @@ import { useBookings } from '../context/BookingContext';
 import AddressForm from '../components/AddressForm';
 import { Address } from '../types';
 import { supabase } from '../lib/supabase';
-import { razorpayService } from '../lib/razorpay';
 
 const CheckoutPage: React.FC = () => {
   const navigate = useNavigate();
@@ -30,11 +29,13 @@ const CheckoutPage: React.FC = () => {
   const [selectedTip, setSelectedTip] = useState<string>('');
   const [customTip, setCustomTip] = useState<string>('');
   const [isDetectingLocation, setIsDetectingLocation] = useState(false);
-  const [isProcessingPayment, setIsProcessingPayment] = useState(false);
-  const [paymentError, setPaymentError] = useState<string | null>(null);
+  const [addressesLoading, setAddressesLoading] = useState(true);
+  const [isInstantBooking, setIsInstantBooking] = useState(false);
+  const [generateUniqueCode, setGenerateUniqueCode] = useState(false);
+  const [uniqueCode, setUniqueCode] = useState<string>('');
 
   // Generate available dates (next 7 days)
-  const availableDates = Array.from({ length: 7 }, (_, i) => {
+  const availableDates = Array.from({ length: 14 }, (_, i) => {
     const date = new Date();
     date.setDate(date.getDate() + i);
     return date.toISOString().split('T')[0];
@@ -46,7 +47,8 @@ const CheckoutPage: React.FC = () => {
     '11:00 AM - 01:00 PM',
     '01:00 PM - 03:00 PM',
     '03:00 PM - 05:00 PM',
-    '05:00 PM - 07:00 PM'
+    '05:00 PM - 07:00 PM',
+    '07:00 PM - 09:00 PM'
   ];
 
   // Enhanced time slot and date selection handlers
@@ -75,6 +77,23 @@ const CheckoutPage: React.FC = () => {
     // Also save to localStorage for persistence
     localStorage.setItem('selectedDate', date);
   };
+
+  // Generate random unique code for instant booking
+  useEffect(() => {
+    if (generateUniqueCode) {
+      const generateCode = () => {
+        const characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+        let result = '';
+        for (let i = 0; i < 6; i++) {
+          result += characters.charAt(Math.floor(Math.random() * characters.length));
+        }
+        return result;
+      };
+      
+      setUniqueCode(generateCode());
+      setGenerateUniqueCode(false);
+    }
+  }, [generateUniqueCode]);
 
   // Check authentication status
   useEffect(() => {
@@ -114,6 +133,8 @@ const CheckoutPage: React.FC = () => {
   useEffect(() => {
     const loadAddresses = async () => {
       try {
+        setAddressesLoading(true);
+        
         // First, try sessionStorage for the latest address (most reliable fallback)
         const latestAddressJson = sessionStorage.getItem('latestAddress');
         if (latestAddressJson) {
@@ -198,6 +219,8 @@ const CheckoutPage: React.FC = () => {
         }
       } catch (err) {
         console.error('Error loading addresses:', err);
+      } finally {
+        setAddressesLoading(false);
       }
     };
     
@@ -254,6 +277,7 @@ const CheckoutPage: React.FC = () => {
 
   const handleAddressAdded = async () => {
     setShowAddressForm(false);
+    setAddressesLoading(true);
     
     try {
       // First try to get the latest address from sessionStorage
@@ -273,6 +297,8 @@ const CheckoutPage: React.FC = () => {
             setSelectedAddress(latestAddress.id);
           }
           
+          // We found the address in sessionStorage, so we're done
+          setAddressesLoading(false);
           return;
         } catch (parseError) {
           console.log('Error parsing latest address from sessionStorage');
@@ -334,6 +360,8 @@ const CheckoutPage: React.FC = () => {
       }
     } catch (error) {
       console.log('Error in handleAddressAdded:', error);
+    } finally {
+      setAddressesLoading(false);
     }
   };
 
@@ -426,7 +454,47 @@ const CheckoutPage: React.FC = () => {
     }
   };
 
+  // Handle instant booking toggle
+  const handleInstantBookingToggle = () => {
+    setIsInstantBooking(!isInstantBooking);
+    if (!isInstantBooking && !uniqueCode) {
+      setGenerateUniqueCode(true);
+    }
+  };
+
   const handlePlaceOrder = async () => {
+    // For instant bookings, set date to today and time to the next available slot
+    if (isInstantBooking) {
+      const today = new Date().toISOString().split('T')[0];
+      setSelectedDate(today);
+      
+      // Set the time to next available slot based on current time
+      const currentHour = new Date().getHours();
+      let selectedTimeSlot = availableTimeSlots[0]; // Default to first slot
+      
+      if (currentHour < 9) {
+        selectedTimeSlot = availableTimeSlots[0]; // 9-11 AM
+      } else if (currentHour < 11) {
+        selectedTimeSlot = availableTimeSlots[1]; // 11-1 PM
+      } else if (currentHour < 13) {
+        selectedTimeSlot = availableTimeSlots[2]; // 1-3 PM
+      } else if (currentHour < 15) {
+        selectedTimeSlot = availableTimeSlots[3]; // 3-5 PM
+      } else if (currentHour < 17) {
+        selectedTimeSlot = availableTimeSlots[4]; // 5-7 PM
+      } else if (currentHour < 19) {
+        selectedTimeSlot = availableTimeSlots[5]; // 7-9 PM
+      } else {
+        // After 7 PM, book for tomorrow's first slot
+        const tomorrow = new Date();
+        tomorrow.setDate(tomorrow.getDate() + 1);
+        setSelectedDate(tomorrow.toISOString().split('T')[0]);
+        selectedTimeSlot = availableTimeSlots[0];
+      }
+      
+      setSelectedTime(selectedTimeSlot);
+    }
+    
     if (!validate()) {
       return;
     }
@@ -437,7 +505,6 @@ const CheckoutPage: React.FC = () => {
     }
     
     setIsLoading(true);
-    setPaymentError(null); // Clear any previous payment errors
     
     try {
       // Get the current user ID (either from Supabase or local storage)
@@ -447,177 +514,74 @@ const CheckoutPage: React.FC = () => {
         throw new Error('User ID not found');
       }
     
-      // Create a unique receipt ID
-      const receiptId = `order_${Date.now()}_${userId.slice(0, 8)}`;
-
-      // Only process payment for online payment method
-      if (paymentMethod === 'online') {
-        setIsProcessingPayment(true);
+      // Create a booking for each item in the cart
+      for (const item of items) {
+        const bookingStatus = isInstantBooking ? ('confirmed' as const) : ('pending' as const);
         
+        const booking = {
+          userId: userId,
+          serviceId: item.service.id,
+          providerId: item.service.providerId || '1', // Use providerId from service if available, otherwise default
+          date: selectedDate,
+          time: selectedTime,
+          status: bookingStatus,
+          addressId: selectedAddress,
+          price: item.service.price * item.quantity,
+          tipAmount: tipAmount,
+          paymentMethod: paymentMethod,
+          isInstantBooking: isInstantBooking,
+          uniqueCode: isInstantBooking ? uniqueCode : undefined
+        };
+        
+        // Try to create booking in Supabase if available
         try {
-          console.log('Starting payment process with total amount:', totalAmount);
+          const { data: session } = await supabase.auth.getSession();
           
-          // In manual mode, we don't need to create an order first
-          // We'll just call openCheckout directly
-          const response = await razorpayService.openCheckout({
-            orderId: '', // Empty in manual mode
-            amount: totalAmount * 100, // Amount in paisa
-            name: 'SmartServ',
-            description: `Payment for ${items.length} service(s)`,
-            prefillData: {
-              name: user?.name || profile?.full_name || '',
-              email: user?.email || profile?.email || '',
-              contact: user?.phone || profile?.phone || ''
+          if (session?.session?.user) {
+            const { error } = await supabase
+              .from('bookings')
+              .insert({
+                user_id: session.session.user.id,
+                service_id: item.service.id,
+                provider_id: item.service.providerId || '1',
+                booking_date: selectedDate,
+                booking_time: selectedTime,
+                status: isInstantBooking ? 'confirmed' : 'pending',
+                address_id: selectedAddress,
+                price: item.service.price * item.quantity,
+                tip_amount: tipAmount,
+                payment_method: paymentMethod,
+                is_instant_booking: isInstantBooking,
+                unique_code: isInstantBooking ? uniqueCode : null
+              });
+              
+            if (error) {
+              console.error('Error creating booking in Supabase:', error);
+              // Fall back to local storage if Supabase fails
+              addBooking(booking);
             }
-          });
-          
-          console.log('Payment successful:', response);
-          
-          // Store payment info to use when creating bookings
-          const paymentInfo = {
-            paymentId: response.razorpay_payment_id,
-            orderId: response.razorpay_order_id || ''
-          };
-          
-          // Now create the bookings with payment info
-          await createBookings(userId, paymentInfo);
-          
-          // Show a success message (optional)
-          alert('Payment successful! Your booking has been confirmed.');
-          
-          // Clear cart and redirect
-          clearCart();
-          navigate('/bookings', { state: { success: true } });
-        } catch (error) {
-          console.error('Payment error:', error);
-          
-          // Show a more user-friendly error message
-          let errorMessage = 'Payment failed';
-          
-          if (error instanceof Error) {
-            if (error.message.includes('canceled by user')) {
-              errorMessage = 'Payment was canceled';
-            } else {
-              errorMessage = error.message;
-            }
+          } else {
+            // Fall back to local storage if no Supabase session
+            addBooking(booking);
           }
-          
-          setPaymentError(errorMessage);
-          setIsLoading(false);
-          setIsProcessingPayment(false);
-          return;
+        } catch (error) {
+          console.error('Error with Supabase booking:', error);
+          // Fall back to local storage
+          addBooking(booking);
         }
-      } else {
-        // For cash on delivery, just create the bookings without payment processing
-        await createBookings(userId);
-        
-        // Clear cart and redirect
-        clearCart();
-        navigate('/bookings', { state: { success: true } });
       }
+    
+      // Clear the cart
+      clearCart();
+      
+      // Redirect to bookings page with success message
+      navigate('/bookings', { state: { success: true } });
     } catch (error) {
       console.error('Error creating bookings:', error);
       setErrors({ general: 'Failed to create bookings. Please try again.' });
-      setIsLoading(false);
-      setIsProcessingPayment(false);
     } finally {
       setIsLoading(false);
-      setIsProcessingPayment(false);
     }
-  };
-
-  // Helper function to create bookings
-  const createBookings = async (
-    userId: string, 
-    paymentInfo?: { paymentId: string; orderId: string }
-  ) => {
-    console.log('Creating bookings for userId:', userId);
-    const createdBookings = [];
-    
-    // Create a booking for each item in the cart
-    for (const item of items) {
-      const booking = {
-        userId: userId,
-        serviceId: item.service.id,
-        providerId: item.service.providerId || '1',
-        date: selectedDate,
-        time: selectedTime,
-        status: 'confirmed' as const,
-        addressId: selectedAddress,
-        price: item.service.price * item.quantity,
-        tipAmount: tipAmount,
-        paymentMethod: paymentMethod,
-        paymentId: paymentInfo?.paymentId || null,
-        paymentOrderId: paymentInfo?.orderId || null,
-        paymentStatus: paymentInfo ? 'paid' : 'pending',
-        // Add these fields to help with displaying in BookingCard
-        serviceName: item.service.name,
-        serviceImage: item.service.image,
-        providerName: 'Service Provider' // Default name if provider info is not available
-      };
-      
-      console.log('Booking data prepared:', booking);
-      
-      // Try to create booking in Supabase if available
-      try {
-        const { data: session } = await supabase.auth.getSession();
-        
-        if (session?.session?.user) {
-          const { data, error } = await supabase
-            .from('bookings')
-            .insert({
-              user_id: session.session.user.id,
-              service_id: item.service.id,
-              provider_id: item.service.providerId || '1',
-              booking_date: selectedDate,
-              booking_time: selectedTime,
-              status: 'confirmed',
-              address_id: selectedAddress,
-              price: item.service.price * item.quantity,
-              tip_amount: tipAmount,
-              payment_method: paymentMethod,
-              payment_id: paymentInfo?.paymentId || null,
-              payment_order_id: paymentInfo?.orderId || null,
-              payment_status: paymentInfo ? 'paid' : 'pending'
-            })
-            .select();
-            
-          if (error) {
-            console.error('Error creating booking in Supabase:', error);
-            console.log('Falling back to local storage for booking');
-            
-            // Fall back to local storage if Supabase fails
-            const savedBooking = addBooking({...booking});
-            createdBookings.push(savedBooking);
-          } else if (data && data.length > 0) {
-            console.log('Supabase booking created:', data[0].id);
-            
-            // Even if Supabase succeeds, still store in local context for immediate access
-            const localBooking = {
-              ...booking,
-              id: data[0].id // Use the Supabase ID for the local booking
-            };
-            
-            // Add to local context storage
-            const savedBooking = addBooking(localBooking);
-            createdBookings.push(savedBooking);
-          }
-        } else {
-          // Fall back to local storage if no Supabase session
-          console.log('No Supabase session, using local storage for booking');
-          const savedBooking = addBooking({...booking});
-          createdBookings.push(savedBooking);
-        }
-      } catch (error) {
-        console.error('Error with Supabase booking:', error);
-        // Fall back to local storage
-        const savedBooking = addBooking({...booking});
-        createdBookings.push(savedBooking);
-      }
-    }
-    
-    console.log(`Successfully created ${createdBookings.length} bookings`);
-    return createdBookings;
   };
 
   if (pageLoading) {
@@ -646,13 +610,6 @@ const CheckoutPage: React.FC = () => {
         <div className="mb-6 bg-red-50 border-l-4 border-red-500 text-red-700 p-4 rounded-md flex items-center">
           <AlertCircle size={20} className="mr-2 flex-shrink-0" />
           <span>{errors.general}</span>
-        </div>
-      )}
-
-      {paymentError && (
-        <div className="mb-6 bg-red-50 border-l-4 border-red-500 text-red-700 p-4 rounded-md flex items-center">
-          <AlertCircle size={20} className="mr-2 flex-shrink-0" />
-          <span>Payment failed: {paymentError}</span>
         </div>
       )}
       
@@ -746,12 +703,61 @@ const CheckoutPage: React.FC = () => {
             </div>
           </div>
           
-          {/* Time Slot */}
+          {/* Instant Booking Option */}
           <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden mb-6">
+            <div className="p-4 border-b border-gray-200">
+              <h2 className="font-medium text-gray-800 flex items-center">
+                <Zap size={18} className="mr-2 text-yellow-500" />
+                Instant Booking
+              </h2>
+            </div>
+            
+            <div className="p-4">
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <p className="font-medium text-gray-800">Get service ASAP</p>
+                  <p className="text-sm text-gray-600">Book the next available slot today</p>
+                </div>
+                <label className="relative inline-flex items-center cursor-pointer">
+                  <input 
+                    type="checkbox" 
+                    className="sr-only peer" 
+                    checked={isInstantBooking}
+                    onChange={handleInstantBookingToggle}
+                  />
+                  <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                </label>
+              </div>
+              
+              {isInstantBooking && (
+                <div className="bg-blue-50 rounded-md p-4 border border-blue-100">
+                  <div className="flex items-start">
+                    <CheckCircle size={18} className="text-blue-600 mt-1 mr-2 flex-shrink-0" />
+                    <div>
+                      <p className="text-blue-800 font-medium">Instant booking enabled</p>
+                      <p className="text-sm text-blue-700 mt-1">Your service will be scheduled for the earliest available slot today.</p>
+                      {uniqueCode && (
+                        <div className="mt-2">
+                          <p className="text-xs text-blue-700 mb-1">Your unique booking code:</p>
+                          <div className="bg-white border border-blue-200 rounded p-2 font-mono text-center font-medium text-blue-900">
+                            {uniqueCode}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+          
+          {/* Time Slot */}
+          <div className={`bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden mb-6 ${isInstantBooking ? 'opacity-50 pointer-events-none' : ''}`}>
             <div className="p-4 border-b border-gray-200">
               <h2 className="font-medium text-gray-800 flex items-center">
                 <Clock size={18} className="mr-2" />
                 Slot
+                {isInstantBooking && <span className="ml-2 text-xs text-gray-500">(Disabled for instant bookings)</span>}
               </h2>
             </div>
             
@@ -761,7 +767,7 @@ const CheckoutPage: React.FC = () => {
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">Date</label>
                     <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
-                      {availableDates.map((date) => (
+                      {availableDates.slice(0, 7).map((date) => (
                         <button
                           key={date}
                           type="button"
@@ -899,6 +905,13 @@ const CheckoutPage: React.FC = () => {
                 <p className="text-gray-600">Taxes and Fee</p>
                 <p className="text-gray-800 font-medium">₹{taxes}</p>
               </div>
+
+              {isInstantBooking && (
+                <div className="flex justify-between">
+                  <p className="text-gray-600">Instant Booking Fee</p>
+                  <p className="text-gray-800 font-medium">₹99</p>
+                </div>
+              )}
               
               {tipAmount > 0 && (
                 <div className="flex justify-between">
@@ -909,12 +922,12 @@ const CheckoutPage: React.FC = () => {
               
               <div className="border-t border-gray-200 pt-4 flex justify-between">
                 <p className="text-lg font-semibold text-gray-800">Total amount</p>
-                <p className="text-lg font-bold text-gray-900">₹{totalAmount}</p>
+                <p className="text-lg font-bold text-gray-900">₹{totalAmount + (isInstantBooking ? 99 : 0)}</p>
               </div>
               
               <div className="border-t border-gray-200 pt-4 flex justify-between">
                 <p className="text-lg font-semibold text-gray-800">Amount to pay</p>
-                <p className="text-lg font-bold text-gray-900">₹{totalAmount}</p>
+                <p className="text-lg font-bold text-gray-900">₹{totalAmount + (isInstantBooking ? 99 : 0)}</p>
               </div>
             </div>
             
@@ -969,26 +982,27 @@ const CheckoutPage: React.FC = () => {
             
             <button
               onClick={handlePlaceOrder}
-                disabled={isLoading || isProcessingPayment || addresses.length === 0 || !selectedDate || !selectedTime}
-                className="w-full bg-blue-600 text-white py-3 px-4 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50"
-              >
-                {isLoading || isProcessingPayment ? (
-                  <>
-                    <Loader size={18} className="inline animate-spin mr-2" />
-                    {isProcessingPayment ? 'Processing Payment...' : 'Processing...'}
-                  </>
-                ) : addresses.length === 0 ? 
-                  'Add an address to continue' : 
-                  !selectedDate || !selectedTime ? 
-                  'Select date and time to continue' : 
-                  paymentMethod === 'online' ? 
-                  `Pay ₹${totalAmount} Online` : 
-                  `Pay ₹${totalAmount} on Delivery`}
+              disabled={isLoading || addresses.length === 0 || (!isInstantBooking && (!selectedDate || !selectedTime))}
+              className="w-full bg-blue-600 text-white py-3 px-4 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 flex justify-center items-center"
+            >
+              {isLoading ? (
+                <>
+                  <Loader size={18} className="animate-spin mr-2" />
+                  Processing...
+                </>
+              ) : addresses.length === 0 ? 
+                'Add an address to continue' : 
+                !selectedDate || !selectedTime && !isInstantBooking ? 
+                'Select date and time to continue' : 
+                <>
+                  {isInstantBooking && <Zap size={18} className="mr-2" />}
+                  Pay ₹{totalAmount + (isInstantBooking ? 99 : 0)}
+                </>
+              }
             </button>
               
-              <div className="mt-4 text-right">
-                <button className="text-sm text-blue-600 hover:text-blue-800">View breakup</button>
-              </div>
+            <div className="mt-4 text-right">
+              <button className="text-sm text-blue-600 hover:text-blue-800">View breakup</button>
             </div>
           </div>
         </div>
